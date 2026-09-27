@@ -63,8 +63,9 @@ test_fmt() { # pass only if all tests pass; record the count
 tests_json() { local t; t=$(cat "$W/ctest.sum" 2>/dev/null); echo ",\"tests\":\"$t\""; }
 cc_json() { ccache -s 2>/dev/null | awk '/Hits:/ && !h {h=$2" of "$4} /Misses:/ && !m {m=$2} END{printf ",\"ccache_hits\":\"%s\",\"ccache_misses\":\"%s\"",h,m}'; }
 sha_json() { echo ",\"commit\":\"$(git -C "$W/fmt" rev-parse --short HEAD 2>/dev/null)\""; }
-incr() { # a real edit changes CONTENT (touch alone is a ccache hit, not a compile)
-  echo "// bench edit $(date +%s%N)" >> "$W/fmt/src/format.cc" && build_fmt && test_fmt; }
+incr() { # a real edit changes CODE: touch = ccache hit; a comment = hit too (ccache hashes preprocessed source)
+  local n; n=$(date +%s%N)
+  echo "namespace { [[maybe_unused]] volatile int bench_edit_$n = 1; }" >> "$W/fmt/src/format.cc" && build_fmt && test_fmt; }
 
 bg_check() { # is the heartbeat process from start-bg still alive, and when did it last beat?
   local pid alive=false gap=-1
@@ -94,12 +95,12 @@ case "$MODE" in
     phase build_cold build_fmt; phase test test_fmt; emit test_result "$(now)" "$(now)" true "$(tests_json)$(cc_json)$(sha_json)"
     ninja -C "$W/fmt/build" -t clean >/dev/null; ccache -z >/dev/null 2>&1
     phase build_warm build_fmt; emit warm_ccache "$(now)" "$(now)" true "$(cc_json)"
-    phase incr incr; emit incr_result "$(now)" "$(now)" true "$(tests_json)" ;;
+    ccache -z >/dev/null 2>&1; phase incr incr; emit incr_result "$(now)" "$(now)" true "$(tests_json)$(cc_json)" ;;
   ci-resume)
     env_info; ccache -z >/dev/null 2>&1
     phase deps deps; phase clone clone_fmt; phase configure configure_fmt
     phase build_restored build_fmt; emit restored_ccache "$(now)" "$(now)" true "$(cc_json)"
-    phase incr incr; emit incr_result "$(now)" "$(now)" true "$(tests_json)$(sha_json)" ;;
+    ccache -z >/dev/null 2>&1; phase incr incr; emit incr_result "$(now)" "$(now)" true "$(tests_json)$(cc_json)$(sha_json)" ;;
   start-bg)
     nohup bash -c "while :; do date +%s > '$W/heartbeat'; sleep 1; done" >/dev/null 2>&1 &
     echo $! > "$W/bg.pid"; sleep 2; bg_check ;;
