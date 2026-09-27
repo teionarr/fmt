@@ -31,7 +31,8 @@ phase() { # name cmd...
   local name=$1; shift; local s e rc t
   s=$(now); t=$( { TIMEFORMAT='%U %S'; time "$@" >"$W/$name.log" 2>&1; } 2>&1 ); rc=$?; e=$(now)
   set -- $t; emit "$name" "$s" "$e" "$([ $rc -eq 0 ] && echo true || echo false)" ",\"cpu_user\":${1:-0},\"cpu_sys\":${2:-0}"
-  return $rc
+  if [ $rc -ne 0 ]; then echo "PHASE FAILED: $name (rc=$rc)" >&2; tail -20 "$W/$name.log" >&2; exit 3; fi  # fail fast: no silent 'success'
+  return 0
 }
 jsonstr() { printf '%s' "$1" | tr -d '\n"\\' | cut -c1-200; }
 
@@ -114,7 +115,7 @@ case "$MODE" in
     phase configure_opencv cmake -S "$W/opencv" -B "$W/opencv/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_LIST=core,imgproc,imgcodecs,features,geometry,calib,dnn -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF \
       -DBUILD_EXAMPLES=OFF -DBUILD_opencv_apps=OFF -DBUILD_JAVA=OFF -DBUILD_opencv_python3=OFF -DBUILD_DOCS=OFF \
-      -DENABLE_CCACHE=ON
+      -DENABLE_CCACHE=ON -DOPENCV_PYTHON_SKIP_DETECTION=ON
     ccache -C >/dev/null 2>&1; ccache -z >/dev/null 2>&1
     phase opencv_cold ninja -C "$W/opencv/build" -j"$JOBS"
     ninja -C "$W/opencv/build" -t clean >/dev/null; ccache -z >/dev/null 2>&1
