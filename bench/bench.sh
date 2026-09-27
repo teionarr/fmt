@@ -121,7 +121,7 @@ case "$MODE" in
   py-full)
     env_info; phase uv get_uv; phase py_clone clone_py
     rm -rf "$UV_CACHE_DIR"; phase py_install_cold install_py
-    phase py_test test_py; emit py_test_result "$(now)" "$(now)" true "$(pytests_json)"
+    phase py_test test_py; emit py_test_result "$(now)" "$(now)" true "$(pytests_json),\"python\":\"$("$W/fastapi/.venv/bin/python" -c 'import sys;print(sys.version.split()[0], sys.base_prefix)' 2>/dev/null)\""
     rm -rf "$W/fastapi/.venv"; phase py_install_warm install_py
     phase py_edit_test edit_py; emit py_edit_result "$(now)" "$(now)" true "$(pytests_json)" ;;
   py-ci-resume)
