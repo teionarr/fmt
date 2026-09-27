@@ -111,7 +111,7 @@ case "$MODE" in
     phase incr incr; emit incr_result "$(now)" "$(now)" true "$(tests_json)$(cc_json)" ;;
   opencv)
     env_info; phase deps deps
-    phase clone_opencv git clone -q --depth 1 --branch 5.0.0 https://github.com/opencv/opencv.git "$W/opencv"
+    rm -rf "$W/opencv"; phase clone_opencv git clone -q --depth 1 --branch 5.0.0 https://github.com/opencv/opencv.git "$W/opencv"
     phase configure_opencv cmake -S "$W/opencv" -B "$W/opencv/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_LIST=core,imgproc,imgcodecs,features,geometry,calib,dnn -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF \
       -DBUILD_EXAMPLES=OFF -DBUILD_opencv_apps=OFF -DBUILD_JAVA=OFF -DBUILD_opencv_python3=OFF -DBUILD_DOCS=OFF \
