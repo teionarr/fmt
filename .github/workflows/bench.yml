@@ -6,30 +6,36 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "bench.sh mode: full | ci-resume | opencv"
+        description: "bench.sh mode: full | ci-resume | opencv | py-full | py-ci-resume"
         required: true
         default: full
+env:
+  MODE: ${{ inputs.mode || 'full' }}
 jobs:
   bench:
     runs-on: ubuntu-24.04   # 4 vCPU / 16 GB (public repo standard runner)
     steps:
       - uses: actions/checkout@v4
-      - name: Restore ccache (ci-resume = ephemeral-CI analog of resume)
-        if: (inputs.mode || 'full') == 'ci-resume'
+      - name: Restore caches (ephemeral-CI analog of resume)
+        if: endsWith(env.MODE, 'ci-resume')
         uses: actions/cache/restore@v4
         with:
-          path: ~/.ccache-bench
-          key: ccache-bench-${{ github.run_id }}
-          restore-keys: ccache-bench-
+          path: |
+            ~/.ccache-bench
+            ~/.cache/uv-bench
+          key: bench-caches-${{ github.run_id }}
+          restore-keys: bench-caches-
       - name: bench
-        run: bash bench/bench.sh ${{ inputs.mode || 'full' }} gha
-      - name: Save ccache
-        if: (inputs.mode || 'full') == 'full'
+        run: bash bench/bench.sh "$MODE" gha
+      - name: Save caches
+        if: env.MODE == 'full' || env.MODE == 'py-full'
         uses: actions/cache/save@v4
         with:
-          path: ~/.ccache-bench
-          key: ccache-bench-${{ github.run_id }}
+          path: |
+            ~/.ccache-bench
+            ~/.cache/uv-bench
+          key: bench-caches-${{ github.run_id }}
       - uses: actions/upload-artifact@v4
         with:
-          name: results-${{ inputs.mode || 'full' }}
+          name: results-${{ env.MODE }}
           path: ~/bench/*.jsonl

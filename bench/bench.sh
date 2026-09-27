@@ -6,6 +6,9 @@
 #   resume      persistent-env resume: env_info + bg-process check + incr (repo already present)
 #   start-bg    start a heartbeat process (to test "processes survive pause/resume")
 #   opencv      env_info, deps, OpenCV 5.0.0 locked config: build_cold, build_warm (-j$JOBS)
+#   py-full     FastAPI 0.141.1: env_info, uv, clone, install_cold (empty uv cache), test, install_warm, edit+test
+#   py-ci-resume  ephemeral analog: uv, clone, install (restored uv cache), test, edit+test
+#   py-resume   persistent-env resume: env_info + bg-process check + edit+test (venv already present)
 # Output: one JSON line per phase to stdout and to $W/results.jsonl
 set -uo pipefail
 MODE=${1:?mode}; ENV=${2:?env-label}
@@ -13,6 +16,8 @@ JOBS=${JOBS:-4}
 W=${BENCH_DIR:-$HOME/bench}; mkdir -p "$W"
 export CCACHE_DIR=${CCACHE_DIR:-$HOME/.ccache-bench} CCACHE_MAXSIZE=3G
 FMT_REPO=https://github.com/teionarr/fmt.git; FMT_REF=bench-v1
+export UV_CACHE_DIR=${UV_CACHE_DIR:-$HOME/.cache/uv-bench} UV_PYTHON_INSTALL_DIR=$HOME/.uv-python
+UV_VERSION=0.12.19; PY_REF=0.141.1
 SUDO=; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo -n"
 
 now() { date +%s.%N; }
@@ -68,6 +73,17 @@ bg_check() { # is the heartbeat process from start-bg still alive, and when did 
   local s; s=$(now); emit bg_check "$s" "$s" true ",\"bg_alive\":$alive,\"heartbeat_age_s\":$gap"
 }
 
+# ---- Python workload (FastAPI, uv-locked deps; uv also installs Python 3.11 itself) ----
+uv_bin() { command -v uv 2>/dev/null || echo "$HOME/.local/bin/uv"; }
+get_uv() { [ -x "$(uv_bin)" ] && "$(uv_bin)" --version | grep -q "$UV_VERSION" && return 0
+  curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" | env UV_NO_MODIFY_PATH=1 sh; }
+clone_py() { rm -rf "$W/fastapi"; git clone -q --depth 1 --branch "$PY_REF" https://github.com/fastapi/fastapi.git "$W/fastapi"; }
+install_py() { (cd "$W/fastapi" && "$(uv_bin)" sync --frozen --no-dev --group tests --extra all); }
+test_py() { (cd "$W/fastapi" && PYTHONPATH=./docs_src "$(uv_bin)" run --no-sync pytest -q -p no:cacheprovider -n "$JOBS" --dist loadgroup tests scripts/tests/) > "$W/pytest.out" 2>&1; local rc=$?
+  tail -1 "$W/pytest.out" | tr -d '=' | sed 's/^ *//' > "$W/pytest.sum"; return $rc; }
+pytests_json() { echo ",\"tests\":\"$(cat "$W/pytest.sum" 2>/dev/null)\""; }
+edit_py() { echo "# bench edit $(date +%s%N)" >> "$W/fastapi/fastapi/routing.py" && test_py; }
+
 case "$MODE" in
   full)
     env_info
@@ -102,5 +118,18 @@ case "$MODE" in
     phase opencv_cold ninja -C "$W/opencv/build" -j"$JOBS"
     ninja -C "$W/opencv/build" -t clean >/dev/null; ccache -z >/dev/null 2>&1
     phase opencv_warm ninja -C "$W/opencv/build" -j"$JOBS"; emit opencv_ccache "$(now)" "$(now)" true "$(cc_json)" ;;
+  py-full)
+    env_info; phase uv get_uv; phase py_clone clone_py
+    rm -rf "$UV_CACHE_DIR"; phase py_install_cold install_py
+    phase py_test test_py; emit py_test_result "$(now)" "$(now)" true "$(pytests_json)"
+    rm -rf "$W/fastapi/.venv"; phase py_install_warm install_py
+    phase py_edit_test edit_py; emit py_edit_result "$(now)" "$(now)" true "$(pytests_json)" ;;
+  py-ci-resume)
+    env_info; phase uv get_uv; phase py_clone clone_py; phase py_install_restored install_py
+    phase py_test test_py; phase py_edit_test edit_py; emit py_edit_result "$(now)" "$(now)" true "$(pytests_json)" ;;
+  py-resume)
+    env_info; bg_check
+    [ -d "$W/fastapi/.venv" ] && emit files_intact "$(now)" "$(now)" true || emit files_intact "$(now)" "$(now)" false
+    phase py_edit_test edit_py; emit py_edit_result "$(now)" "$(now)" true "$(pytests_json)" ;;
   *) echo "unknown mode $MODE" >&2; exit 2 ;;
 esac
