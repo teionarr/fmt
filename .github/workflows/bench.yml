@@ -11,6 +11,7 @@ on:
         default: full
 env:
   MODE: ${{ inputs.mode || 'full' }}
+  FAMILY: ${{ startsWith(inputs.mode || 'full', 'py') && 'py' || 'cc' }}   # separate caches per workload: fmt runs must never restore a FastAPI cache
 jobs:
   bench:
     runs-on: ubuntu-24.04   # 4 vCPU / 16 GB (public repo standard runner)
@@ -23,8 +24,8 @@ jobs:
           path: |
             ~/.ccache-bench
             ~/.cache/uv-bench
-          key: bench-caches-${{ github.run_id }}
-          restore-keys: bench-caches-
+          key: bench-${{ env.FAMILY }}-${{ github.run_id }}
+          restore-keys: bench-${{ env.FAMILY }}-
       - name: bench
         run: bash bench/bench.sh "$MODE" gha
       - name: Save caches
@@ -34,7 +35,7 @@ jobs:
           path: |
             ~/.ccache-bench
             ~/.cache/uv-bench
-          key: bench-caches-${{ github.run_id }}
+          key: bench-${{ env.FAMILY }}-${{ github.run_id }}
       - uses: actions/upload-artifact@v4
         with:
           name: results-${{ env.MODE }}
