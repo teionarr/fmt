@@ -1,0 +1,32 @@
+name: islo-bench
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "bench.sh mode: full | ci-resume | opencv"
+        required: true
+        default: full
+jobs:
+  bench:
+    runs-on: ubuntu-24.04   # 4 vCPU / 16 GB (public repo standard runner)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore ccache (ci-resume = ephemeral-CI analog of resume)
+        if: inputs.mode == 'ci-resume'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache-bench
+          key: ccache-bench-${{ github.run_id }}
+          restore-keys: ccache-bench-
+      - name: bench
+        run: bash bench/bench.sh ${{ inputs.mode }} gha
+      - name: Save ccache
+        if: inputs.mode == 'full'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache-bench
+          key: ccache-bench-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ inputs.mode }}
+          path: ~/bench/*.jsonl

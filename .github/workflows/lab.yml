@@ -1,7 +1,5 @@
 name: lab-build
 on:
-  push:
-    branches: [lab]
   workflow_dispatch:
 jobs:
   build:
