@@ -12,7 +12,7 @@ MODE=${1:?mode}; ENV=${2:?env-label}
 JOBS=${JOBS:-4}
 W=${BENCH_DIR:-$HOME/bench}; mkdir -p "$W"
 export CCACHE_DIR=${CCACHE_DIR:-$HOME/.ccache-bench} CCACHE_MAXSIZE=3G
-FMT_REPO=https://github.com/teionarr/fmt.git; FMT_REF=lab
+FMT_REPO=https://github.com/teionarr/fmt.git; FMT_REF=bench-v1
 SUDO=; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo -n"
 
 now() { date +%s.%N; }
@@ -58,7 +58,8 @@ test_fmt() { # pass only if all tests pass; record the count
 tests_json() { local t; t=$(cat "$W/ctest.sum" 2>/dev/null); echo ",\"tests\":\"$t\""; }
 cc_json() { ccache -s 2>/dev/null | awk '/Hits:/ && !h {h=$2" of "$4} /Misses:/ && !m {m=$2} END{printf ",\"ccache_hits\":\"%s\",\"ccache_misses\":\"%s\"",h,m}'; }
 sha_json() { echo ",\"commit\":\"$(git -C "$W/fmt" rev-parse --short HEAD 2>/dev/null)\""; }
-incr() { touch "$W/fmt/src/format.cc" && build_fmt && test_fmt; }
+incr() { # a real edit changes CONTENT (touch alone is a ccache hit, not a compile)
+  echo "// bench edit $(date +%s%N)" >> "$W/fmt/src/format.cc" && build_fmt && test_fmt; }
 
 bg_check() { # is the heartbeat process from start-bg still alive, and when did it last beat?
   local pid alive=false gap=-1
