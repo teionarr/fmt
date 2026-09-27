@@ -1,5 +1,8 @@
 name: islo-bench
 on:
+  push:
+    branches: [lab]
+    paths: [bench/trigger]
   workflow_dispatch:
     inputs:
       mode:
@@ -12,21 +15,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Restore ccache (ci-resume = ephemeral-CI analog of resume)
-        if: inputs.mode == 'ci-resume'
+        if: (inputs.mode || 'full') == 'ci-resume'
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache-bench
           key: ccache-bench-${{ github.run_id }}
           restore-keys: ccache-bench-
       - name: bench
-        run: bash bench/bench.sh ${{ inputs.mode }} gha
+        run: bash bench/bench.sh ${{ inputs.mode || 'full' }} gha
       - name: Save ccache
-        if: inputs.mode == 'full'
+        if: (inputs.mode || 'full') == 'full'
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache-bench
           key: ccache-bench-${{ github.run_id }}
       - uses: actions/upload-artifact@v4
         with:
-          name: results-${{ inputs.mode }}
+          name: results-${{ inputs.mode || 'full' }}
           path: ~/bench/*.jsonl
